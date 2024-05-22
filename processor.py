@@ -6,16 +6,22 @@ from google.cloud import speech
 import json
 import re
 from googletrans import Translator
+from google.cloud import texttospeech
 
 client_file = "piyush-personal-audio_translator.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = 'piyush-personal-audio_translator.json'
 
 creds = service_account.Credentials.from_service_account_file(client_file)
 CLIENT = speech.SpeechClient(credentials=creds)
+client_t2s = texttospeech.TextToSpeechClient()
+
+cleaned_data = []
 
 # Translator
 translator = Translator()
 
 
+# DONE
 def extract_audio(video_path, audio_path):
     try:
         # Load the video file
@@ -40,6 +46,7 @@ def extract_audio(video_path, audio_path):
 
 
 # Define a function to parse the string
+# DONE
 def parse_string(data):
     data = data.strip().split("results {")
     parsed_data = []
@@ -56,6 +63,7 @@ def parse_string(data):
     return parsed_data
 
 
+# DONE
 def audio_2_text(audio):
     audio_file = audio
     with io.open(audio_file, 'rb') as f:
@@ -75,6 +83,7 @@ def audio_2_text(audio):
     # Parse the string
     data = parse_string(response_str)
 
+    # SAVE TO .json
     with open("data.json", "w") as f:
         json.dump(data, f, indent=4)
 
@@ -90,6 +99,25 @@ def audio_2_text(audio):
 audio_2_text("audio1.mp3")
 
 
+# It will clean that
+def clean_data():
+    f = open('data.json')
+
+    data = json.load(f)
+    print(len(data))
+    # print(type(data))
+    for i in range(len(data)):
+        # print(data[i]["alternatives"][0]["transcript"])
+        # print(data[i]["result_end_time"]["seconds"])
+        cleaned_data.append({
+            "transcript": data[i]["alternatives"][0]["transcript"],
+            "seconds": data[i]["result_end_time"]["seconds"],
+            "nanos": data[i]["result_end_time"]["nanos"],
+        })
+    print("Data cleaned")
+
+
+# DONE
 def translate(data: str, dest: str):
     try:
         translation = translator.translate(data, dest=dest)
@@ -101,4 +129,26 @@ def translate(data: str, dest: str):
 # print(translate("Hello, How are you?", dest="hindi"))
 
 def text_2_audio(text: str, lang: str):
-    pass
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        name='en-US-Studio-O'
+    )
+
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        effects_profile_id=['small-bluetooth-speaker-class-device'],
+        speaking_rate=1,
+        pitch=1
+    )
+
+    response = client_t2s.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    with open("output_audio.mp3", "wb") as out:
+        out.write(response.audio_content)
+        print("Audio content written successfully!")

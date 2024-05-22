@@ -1,2 +1,7 @@
 .env
 piyush-personal-audio_translator.json
+data.json
+.idea
+video.mp4
+audio.mp3
+test.py
