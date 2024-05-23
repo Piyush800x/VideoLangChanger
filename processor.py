@@ -1,5 +1,5 @@
 import os
-from moviepy.editor import VideoFileClip
+from moviepy.editor import VideoFileClip, AudioFileClip
 import io
 from google.oauth2 import service_account
 from google.cloud import speech
@@ -28,6 +28,8 @@ client_t2s = texttospeech.TextToSpeechClient()
 
 cleaned_data = []
 translated_data = []
+lang_segment_files = []
+lang_timestamps = []
 
 # Translator
 translator = Translator()
@@ -50,11 +52,18 @@ def extract_audio(video_path, audio_path):
         print(f"An error occurred: {e}")
 
 
-# Specify the paths
-# video_path = 'video.mp4'
-# audio_path = 'audio.mp3'
-#
-# extract_audio(video_path, audio_path)
+def export_video(original_video_path, audio_path, output_file_path):
+    # Load the original video
+    video = VideoFileClip(f"{original_video_path}")
+
+    # Load the new audio
+    new_audio = AudioFileClip(f"{audio_path}")
+
+    # Set the new audio to the video
+    video_with_new_audio = video.set_audio(new_audio)
+
+    # Write the result to a new video file  # GIVE EXTENSION
+    video_with_new_audio.write_videofile(f"{output_file_path}", codec='libx264', audio_codec='aac')
 
 
 # Define a function to parse the string
@@ -98,14 +107,6 @@ def audio_2_text_transcript(audio):
     # SAVE TO .json
     with open("rawdata.json", "w") as f:
         json.dump(data, f, indent=4)
-
-    print(response)
-    print("-----------------------------")
-    print(response.results)
-
-    print(response)
-    print("-----------------------------")
-    print(response.results)
 
 
 # It will clean that
@@ -164,6 +165,7 @@ def text_2_audio(text: str, output_file):
     with open(f"{output_file}", "wb") as out:
         out.write(response.audio_content)
         print("Audio content written successfully!")
+        lang_segment_files.append(f"{output_file}")
 
 
 def insert_audio(original_audio_path, new_audio, timestamp_ms, output_path):
@@ -178,7 +180,59 @@ def insert_audio(original_audio_path, new_audio, timestamp_ms, output_path):
     #     print(f"An error occurred: {e}")
 
 
+def replace_segments_with_hindi(input_file, output_file, hindi_files, segments):
+    """
+    Replace segments of an English audio file with segments of Hindi audio files.
+
+    :param input_file: Path to the input English audio file.
+    :param output_file: Path to save the output audio file.
+    :param hindi_files: List of paths to the Hindi audio files, matching the segments to replace.
+    :param segments: List of tuples containing start and end times in milliseconds for the segments to be replaced.
+                     Example: [(start1, end1), (start2, end2), ...]
+    """
+    # Load the English audio file
+    english_audio = AudioSegment.from_file(input_file)
+
+    # Sort segments and corresponding Hindi files by start time
+    segments, hindi_files = zip(*sorted(zip(segments, hindi_files), key=lambda x: x[0][0]))
+
+    # Ensure the segments do not overlap and are within bounds
+    segments = [(max(0, start), min(len(english_audio), end)) for start, end in segments]
+
+    # Initialize an empty audio segment for the result
+    output_audio = AudioSegment.empty()
+
+    # Track the end of the last segment processed
+    previous_end = 0
+
+    # Iterate through segments and corresponding Hindi audio files
+    for (start, end), hindi_file in zip(segments, hindi_files):
+        # Add the part of the English audio before the current segment
+        output_audio += english_audio[previous_end:start]
+        # Load the corresponding Hindi audio segment
+        hindi_segment = AudioSegment.from_file(hindi_file)
+        # Adjust the Hindi segment to match the duration of the segment to replace
+        hindi_segment = hindi_segment[:end - start]
+        output_audio += hindi_segment
+        # Update previous_end to the end of the current segment
+        previous_end = end
+
+    # Add the remaining part of the English audio after the last segment
+    output_audio += english_audio[previous_end:]
+
+    # Export the final audio
+    output_audio.export(output_file, format="mp3")
+    print("FINAL AUDIO OUT")
+
+    for item in hindi_files:
+        os.remove(item)
+
+
 def main():
+    video_path = "video.mp4"
+    audio_path = "audio.mp3"
+    extract_audio(video_path, audio_path)
+    # AUDIO -> TEXT and CLEANING
     audio_2_text_transcript("audio.mp3")
     timestamp = audio_2_text_timestamp("audio.mp3")
     clean_data(timestamp)
@@ -188,77 +242,25 @@ def main():
             "start_time": cleaned_data[i]["start_time"],
             "end_time": cleaned_data[i]["end_time"],
         })
+        lang_timestamps.append((int(cleaned_data[i]["start_time"]) * 1000, int(cleaned_data[i]["end_time"]) * 1000))
+    print(f"LANG TIMESTAMP: {lang_timestamps}")
+    print(f"Lang Segment: {lang_segment_files}")
     print(translated_data)
+    # TEXT -> AUDIO
+    for i in range(len(translated_data)):
+        text_2_audio(translated_data[i]["transcript"], f"temp_out-{i}.mp3")
+
+    # AUDIO SEGMENTS > Final Audio with sync
+    replace_segments_with_hindi("audio.mp3", "final_audio.mp3", lang_segment_files, lang_timestamps)
+
+    # Export Video
+    export_video("video.mp4", "final_audio.mp3", "export.mp4")
+
     # for i in range(len(translated_data)):
     #     text_2_audio(translated_data[i]["transcript"], output_file=f"output_audio-{i}.mp3")
     #     print(f"output_audio-{i}.mp3 done")
 
 
-def place_audios():         # FIX IT
-    # # Sample input (with hypothetical English audio file for timing)
-    english_audio_file = "audio.mp3"
-    transcripts = [
-        {
-            'transcript': 'वाह, क्या दर्शक हैं, लेकिन अगर मैं ईमानदार रहूं तो मुझे इसकी परवाह नहीं है कि आप मेरी बातचीत के बारे में क्या सोचते हैं, मुझे इसकी परवाह नहीं है कि इंटरनेट मेरी बातचीत के बारे में क्या सोचता है।',
-            'seconds': 21, 'nanos': 10000000},
-        {
-            'transcript': 'क्योंकि वे वही हैं जो इसे देखते हैं और एक शर्ट प्राप्त करते हैं और मुझे लगता है कि यही वह जगह है जहां ज्यादातर लोग गलत समझते हैं कि आप यहां आपसे बात करने के बजाय आपसे बात कर रहे हैं, यादृच्छिक व्यक्ति फेसबुक स्क्रॉल कर रहा है',
-            'seconds': 33, 'nanos': 750000000},
-        {
-            'transcript': '2009 में आपके द्वारा देखे गए क्लिक के लिए धन्यवाद, हम सभी के पास ये अजीब छोटी चीजें हैं जिन्हें ध्यान विस्तार कहा जाता है, मैं आखिरी बार यह सोचने की कोशिश कर रहा हूं कि मैंने 18 मिनट की बातचीत कब देखी थी, सचमुच वर्षों खर्च होते हैं, इसलिए यदि आपको एक TED दिया जाता है बात जल्दी करो, मैं अपना काम कर रहा हूं और एक मिनट से कम समय में मैं अभी 44 सेकंड पर हूं, इसका मतलब है कि आपके पास एक अंतिम मजाक के लिए समय है कि गुब्बारे इतने महंगे क्यों हैं',
-            'seconds': 64, 'nanos': 570000000},
-        {'transcript': 'मुद्रा स्फ़ीति', 'seconds': 66, 'nanos': 880000000}
-    ]
-
-    # Load the original English audio to get timing reference
-    english_audio = AudioSegment.from_mp3(english_audio_file)
-
-    # Create individual Hindi audio segments
-    hindi_segments = []
-    for i, entry in enumerate(transcripts):
-        text = entry['transcript']
-        start_time = entry['seconds'] * 1000 + entry['nanos'] // 1000000  # convert to milliseconds
-        tts = gTTS(text, lang='hi')
-        tts.save(f"hindi_segment_{i}.mp3")
-        segment = AudioSegment.from_mp3(f"hindi_segment_{i}.mp3")
-
-        # Calculate duration of the original English segment
-        end_time = (transcripts[i + 1]['seconds'] * 1000 + transcripts[i + 1]['nanos'] // 1000000) if i + 1 < len(
-            transcripts) else len(english_audio)
-        original_segment_duration = end_time - start_time
-
-        # Adjust the Hindi segment duration to match the original English segment duration
-        if segment.duration_seconds * 1000 > original_segment_duration:
-            segment = segment[:original_segment_duration]
-        else:
-            silence = AudioSegment.silent(duration=original_segment_duration - segment.duration_seconds * 1000)
-            segment += silence
-
-        hindi_segments.append((start_time, segment))
-
-    # Combine all segments into the final audio
-    final_audio = AudioSegment.silent(
-        duration=len(english_audio))  # Create a silent audio segment with the same length as the original audio
-
-    for start_time, segment in hindi_segments:
-        final_audio = final_audio.overlay(segment, position=start_time)
-
-    # Save the final audio
-    final_audio.export("final_hindi_audio.mp3", format="mp3")
-
-    # # Clean up individual segment files
-    # for i in range(len(transcripts)):
-    #     os.remove(f"hindi_segment_{i}.mp3")
-
-    print("Final audio created successfully as 'final_hindi_audio.mp3'")
-
-
 if __name__ == '__main__':
     main()
-    timestamp_mss = 21 * 1000
-    # insert_audio(original_audio_path="audio.mp3", new_audio="output_audio-0.mp3", timestamp_ms=timestamp_mss,
-    #              output_path="final.mp3")
-    # WORKING but problem
-    # 21 is end timestamp, how to put starting time?
-
 
