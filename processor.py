@@ -4,14 +4,12 @@ import io
 from google.oauth2 import service_account
 from google.cloud import speech
 import json
-import re
 from googletrans import Translator
 from google.cloud import texttospeech
 from pydub import AudioSegment
-import ffmpeg
 from pathlib import Path
-from gtts import gTTS
 from audio2speech import audio_2_text_timestamp
+from tkinter.ttk import Progressbar
 
 
 # Ensure FFmpeg is available
@@ -146,7 +144,7 @@ def text_2_audio(text: str, output_file):
 
     voice = texttospeech.VoiceSelectionParams(
         language_code="hi-IN",
-        name='hi-IN-Wavenet-A'
+        name='hi-IN-Wavenet-B'
     )
 
     audio_config = texttospeech.AudioConfig(
@@ -228,10 +226,11 @@ def replace_segments_with_hindi(input_file, output_file, hindi_files, segments):
         os.remove(item)
 
 
-def main():
-    video_path = "video.mp4"
+def job(progress: Progressbar, video_path):
+    video_path = video_path
     audio_path = "audio.mp3"
     extract_audio(video_path, audio_path)
+    progress['value'] += 20
     # AUDIO -> TEXT and CLEANING
     audio_2_text_transcript("audio.mp3")
     timestamp = audio_2_text_timestamp("audio.mp3")
@@ -246,21 +245,19 @@ def main():
     print(f"LANG TIMESTAMP: {lang_timestamps}")
     print(f"Lang Segment: {lang_segment_files}")
     print(translated_data)
+    progress['value'] += 20
     # TEXT -> AUDIO
     for i in range(len(translated_data)):
         text_2_audio(translated_data[i]["transcript"], f"temp_out-{i}.mp3")
-
+    progress['value'] += 20
     # AUDIO SEGMENTS > Final Audio with sync
     replace_segments_with_hindi("audio.mp3", "final_audio.mp3", lang_segment_files, lang_timestamps)
-
+    progress['value'] += 20
     # Export Video
-    export_video("video.mp4", "final_audio.mp3", "export.mp4")
-
-    # for i in range(len(translated_data)):
-    #     text_2_audio(translated_data[i]["transcript"], output_file=f"output_audio-{i}.mp3")
-    #     print(f"output_audio-{i}.mp3 done")
+    export_video(video_path, "final_audio.mp3", "export.mp4")
+    progress['value'] += 20
 
 
-if __name__ == '__main__':
-    main()
-
+# if __name__ == '__main__':
+#     main()
+#
