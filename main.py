@@ -1,15 +1,15 @@
 import sys
-import threading
 from threading import Thread, Event
-from tkinter import Tk, Toplevel, Label, HORIZONTAL, messagebox
+from tkinter import Tk, Toplevel, Label, HORIZONTAL, messagebox, StringVar
 from tkinter.filedialog import askopenfilename
-from tkinter.ttk import Button, Entry, Progressbar
+from tkinter.ttk import Button, Entry, Progressbar, Combobox
 from processor import job
 
 video_path = None
 processbar = 0
 global progress
 stop_event = Event()
+audio_type = None
 
 
 def read_file():
@@ -25,7 +25,7 @@ def read_file():
     if file:
         video_path = file
     print("Progress Started!")
-    job_thread = Thread(target=job, args=(progress, file))
+    job_thread = Thread(target=job, args=(progress, video_path, audio_type))
     job_thread.start()
     job_thread.join()  # Ensure the job thread completes
 
@@ -42,11 +42,23 @@ def main_window():
     root.title("VideoLangChanger")
     root.iconbitmap("logo.ico")
 
-    label1: Label = Label(root, text="Choose video")
-    label1.pack(pady=10)
+    audio_type_var: StringVar = StringVar()
 
-    button1: Button = Button(root, text="Choose", command=lambda: [t1.start(), t2.start()])
-    button1.pack(pady=10)
+    label2: Label = Label(root, text="Audio voice")
+    label2.grid(row=0, column=0, pady=10, padx=10)
+    label1: Label = Label(root, text="Choose video")
+    label1.grid(row=0, column=1, pady=10, padx=10)
+
+    def read_vars():
+        global audio_type
+        audio_type = audio_type_var.get()
+
+    button1: Button = Button(root, text="Choose", command=lambda: [read_vars(), t1.start(), t2.start()])
+    button1.grid(row=1, column=1, padx=10)
+    cbox: Combobox = Combobox(root, width=15, textvariable=audio_type_var)
+    cbox["values"] = ("Male (Hindi)", "Female (Hindi)", "Male (Bengali)", "Female (Bengali)")
+    cbox.current(0)
+    cbox.grid(row=1, column=0, padx=10)
 
     root.mainloop()
 

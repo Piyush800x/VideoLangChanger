@@ -13,9 +13,9 @@ from tkinter.ttk import Progressbar
 
 
 # Ensure FFmpeg is available
-AudioSegment.ffmpeg = "C:\\Windows\\ffmpeg\\bin\\ffmpeg.exe"  # Adjust path as necessary
-AudioSegment.ffprobe = "C:\\Windows\\ffmpeg\\bin\\ffprobe.exe"
-AudioSegment.converter = "C:\\Windows\\ffmpeg\\bin\\ffmpeg.exe"
+AudioSegment.ffmpeg = "ffmpeg.exe"  # Adjust path as necessary
+AudioSegment.ffprobe = "ffprobe.exe"
+AudioSegment.converter = "ffmpeg.exe"
 
 client_file = "piyush-personal-audio_translator.json"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = 'piyush-personal-audio_translator.json'
@@ -28,6 +28,7 @@ cleaned_data = []
 translated_data = []
 lang_segment_files = []
 lang_timestamps = []
+global audio_lang
 
 # Translator
 translator = Translator()
@@ -139,12 +140,30 @@ def translate(data: str, lang: str):
 
 # print(translate("Hello, How are you?", dest="hindi"))
 
-def text_2_audio(text: str, output_file):
+def text_2_audio(text: str, output_file, voice: str):
+    if voice == "Male (Hindi)":
+        lang_code = "hi-IN"
+        audio_speech = "hi-IN-Wavenet-B"
+    elif voice == "Female (Hindi)":
+        lang_code = "hi-IN"
+        audio_speech = "hi-IN-Wavenet-A"
+    elif voice == "Female (Bengali)":
+        lang_code = "bn-IN"
+        audio_speech = "bn-IN-Standard-C"
+    elif voice == "Male (Bengali)":
+        lang_code = "bn-IN"
+        audio_speech = "bn-IN-Standard-D"
+    elif voice == "rus":
+        lang_code = "ru-RU"
+        audio_speech = "ru-RU-Standard-B"
+    else:
+        audio_speech = "hi-IN-Wavenet-B"
+
     synthesis_input = texttospeech.SynthesisInput(text=text)
 
     voice = texttospeech.VoiceSelectionParams(
-        language_code="hi-IN",
-        name='hi-IN-Wavenet-B'
+        language_code=lang_code,
+        name=f'{audio_speech}'
     )
 
     audio_config = texttospeech.AudioConfig(
@@ -226,7 +245,15 @@ def replace_segments_with_hindi(input_file, output_file, hindi_files, segments):
         os.remove(item)
 
 
-def job(progress: Progressbar, video_path):
+def job(progress: Progressbar, video_path, audio_voice: str):
+    global audio_lang
+    if "Hindi" in audio_voice:
+        audio_lang = "hindi"
+    elif "Bengali" in audio_voice:
+        audio_lang = "bengali"
+    elif "rus" in audio_voice:
+        audio_lang = "russian"
+
     video_path = video_path
     audio_path = "audio.mp3"
     extract_audio(video_path, audio_path)
@@ -237,7 +264,7 @@ def job(progress: Progressbar, video_path):
     clean_data(timestamp)
     for i in range(len(cleaned_data)):
         translated_data.append({
-            "transcript": translate(cleaned_data[i]["transcript"], "hindi"),
+            "transcript": translate(cleaned_data[i]["transcript"], audio_lang),
             "start_time": cleaned_data[i]["start_time"],
             "end_time": cleaned_data[i]["end_time"],
         })
@@ -248,7 +275,7 @@ def job(progress: Progressbar, video_path):
     progress['value'] += 20
     # TEXT -> AUDIO
     for i in range(len(translated_data)):
-        text_2_audio(translated_data[i]["transcript"], f"temp_out-{i}.mp3")
+        text_2_audio(translated_data[i]["transcript"], f"temp_out-{i}.mp3", audio_voice)
     progress['value'] += 20
     # AUDIO SEGMENTS > Final Audio with sync
     replace_segments_with_hindi("audio.mp3", "final_audio.mp3", lang_segment_files, lang_timestamps)
