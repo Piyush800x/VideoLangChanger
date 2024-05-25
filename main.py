@@ -1,33 +1,52 @@
-from threading import Thread
-from tkinter import Tk, Toplevel, Label, HORIZONTAL
+import sys
+import threading
+from threading import Thread, Event
+from tkinter import Tk, Toplevel, Label, HORIZONTAL, messagebox
 from tkinter.filedialog import askopenfilename
 from tkinter.ttk import Button, Entry, Progressbar
 from processor import job
 
-video_path = str
+video_path = None
 processbar = 0
 global progress
+stop_event = Event()
 
 
 def read_file():
     global video_path, progress
     file = askopenfilename(filetypes=[("Video Files", ["*.mp4", "*.avi", "*.mkv"])])
+    print(file)
+    if not file:
+        res = messagebox.askretrycancel("VideoLangChanger", "Select a valid video file.")
+        if res is False:
+            sys.exit(0)
+        else:
+            return read_file()
     if file:
         video_path = file
     print("Progress Started!")
-    Thread(target=job, args=(progress, file)).start()
+    job_thread = Thread(target=job, args=(progress, file))
+    job_thread.start()
+    job_thread.join()  # Ensure the job thread completes
+
+    # Monitor stop event
+    while not stop_event.is_set():
+        pass
+    print("read_file thread stopping...")
+    sys.exit(0)
 
 
 def main_window():
     root: Tk = Tk()
-    root.geometry("480x360")
+    root.geometry("380x200")
     root.title("VideoLangChanger")
+    root.iconbitmap("logo.ico")
 
     label1: Label = Label(root, text="Choose video")
-    label1.pack()
+    label1.pack(pady=10)
 
     button1: Button = Button(root, text="Choose", command=lambda: [t1.start(), t2.start()])
-    button1.pack()
+    button1.pack(pady=10)
 
     root.mainloop()
 
@@ -38,16 +57,27 @@ def processbar_window():
     top.title("VideoLangChanger")
     top.geometry("350x180")
     top.attributes("-topmost", True)
+    top.iconbitmap("logo.ico")
+    top.protocol("WM_DELETE_WINDOW", full_exit)
 
     progress = Progressbar(top, orient=HORIZONTAL, length=200, mode="determinate")
 
     progress['value'] = 0
     progress.pack(pady=50)
 
-    btn1: Button = Button(top, text="Close", command=top.destroy)
+    btn1: Button = Button(top, text="Close", command=full_exit)
     btn1.pack(pady=10)
 
     top.mainloop()
+
+
+def full_exit():
+    res = messagebox.askyesno("VideoLangChanger", "Do you sure want to close this process?")
+    if res:
+        stop_event.set()  # Signal threads to stop
+        sys.exit(1)
+    else:
+        pass
 
 
 t1 = Thread(target=read_file)
